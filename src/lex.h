@@ -21,6 +21,7 @@ typedef enum token {
   T_SYMBOL,
   T_STRLIT,
   T_INTLIT,
+  T_I32,
   T_LAST
 } token_t;
 
@@ -28,7 +29,7 @@ int lex_init(lex_t *l, const char *file_path);
 
 token_t lex_next(lex_t *l);
 
-void lex_kind_label(token_t t, char *buf);
+void lex_kind_label(lex_t *l, token_t t, char *buf);
 
 void lex_report_err(lex_t *lexer, const char *fmt, ...);
 

@@ -7,6 +7,8 @@
 
 #include "arena.h"
 
+static bool _parser_expect(parser_t *p, token_t t);
+
 static bool _parser_expect_next(parser_t *p, token_t t);
 
 static void _throw_expect_but_got(parser_t *p, token_t t1, token_t t2);
@@ -19,7 +21,7 @@ void parser_init(parser_t *p, lex_t *lexer) {
 }
 
 ast_node_t *parser_next(parser_t *p) {
-  assert(A_LAST == 5 && "Implementation missing");
+  assert(A_LAST == 7 && "Implementation missing");
 
   if (!p || p->current_token == T_EOF) return NULL;
 
@@ -35,6 +37,14 @@ ast_node_t *parser_next(parser_t *p) {
 
     p->current_token = lex_next(p->lexer);
 
+    return node;
+  }
+
+  // I32 literal
+  if (p->current_token == T_INTLIT) {
+    node->kind = A_I32;
+    node->data.int_val = p->lexer->int_val;
+    p->current_token = lex_next(p->lexer);
     return node;
   }
 
@@ -71,6 +81,32 @@ ast_node_t *parser_next(parser_t *p) {
     return node;
   }
 
+  // Variable declaration
+  else if (p->current_token == T_I32) {
+    node->kind = A_VAR_DECLARE;
+
+    if (p->current_token == T_I32) node->data.vardeclare.kind = A_I32;
+
+    if (!_parser_expect_next(p, T_SYMBOL)) return NULL;
+
+    node->data.vardeclare.name = arena_alloc(&ast_arena,
+        p->lexer->str_val_size + 1);
+    strncpy(node->data.vardeclare.name, p->lexer->str_val,
+        p->lexer->str_val_size);
+    node->data.vardeclare.name[p->lexer->str_val_size] = '\0';
+
+    if (!_parser_expect_next(p, '=')) return NULL;
+
+    p->current_token = lex_next(p->lexer);
+    node->data.vardeclare.value = parser_next(p);
+
+    if (!_parser_expect(p, ';')) return NULL;
+
+    p->current_token = lex_next(p->lexer);
+
+    return node;
+  }
+
   // Function call
   else if (p->current_token == T_SYMBOL) {
     node->kind = A_FUNCALL;
@@ -101,7 +137,7 @@ ast_node_t *parser_next(parser_t *p) {
   }
 
   char buf[32];
-  lex_kind_label(p->current_token, buf);
+  lex_kind_label(p->lexer, p->current_token, buf);
   printf("[info] lex token: %s\n", buf);
   assert(0 && "Unhandled token");
 
@@ -109,7 +145,7 @@ ast_node_t *parser_next(parser_t *p) {
 }
 
 void parser_print_node(ast_node_t *node) {
-  assert(A_LAST == 5 && "Implementation missing");
+  assert(A_LAST == 7 && "Implementation missing");
 
   if (!node) {
     printf("nil");
@@ -119,6 +155,10 @@ void parser_print_node(ast_node_t *node) {
   switch (node->kind) {
     case A_STRLIT:
       printf("(str %s)", node->data.str_val);
+      break;
+
+    case A_I32:
+      printf("(i32 %ld)", node->data.int_val);
       break;
 
     case A_FUNCALL:
@@ -141,13 +181,19 @@ void parser_print_node(ast_node_t *node) {
 
     case A_MAIN:
     case A_FUNDEF:
-      printf("(def %s (", node->data.fundef.name);
+      printf("(fdef %s (", node->data.fundef.name);
       for (size_t i = 0; i < node->data.fundef.args.count; i++) {
         if (i > 0) printf(" ");
         parser_print_node(node->data.fundef.args.items[i]);
       }
       printf(") ");
       parser_print_node(node->data.fundef.body);
+      printf(")");
+      break;
+
+    case A_VAR_DECLARE:
+      printf("(vdef %s ", node->data.vardeclare.name);
+      parser_print_node(node->data.vardeclare.value);
       printf(")");
       break;
 
@@ -164,8 +210,7 @@ void parser_free(parser_t *p) {
   p = NULL;
 }
 
-bool _parser_expect_next(parser_t *p, token_t t) {
-  p->current_token = lex_next(p->lexer);
+bool _parser_expect(parser_t *p, token_t t) {
   if (p->current_token != t) {
     _throw_expect_but_got(p, t, p->current_token);
     return false;
@@ -173,10 +218,15 @@ bool _parser_expect_next(parser_t *p, token_t t) {
   return true;
 }
 
+bool _parser_expect_next(parser_t *p, token_t t) {
+  p->current_token = lex_next(p->lexer);
+  return _parser_expect(p, t);
+}
+
 static void _throw_expect_but_got(parser_t *p, token_t t1, token_t t2) {
-  char buf1[32], buf2[32];
-  lex_kind_label(t1, buf1);
-  lex_kind_label(t2, buf2);
+  char buf1[256], buf2[256];
+  lex_kind_label(p->lexer, t1, buf1);
+  lex_kind_label(p->lexer, t2, buf2);
   lex_report_err(p->lexer, "Expected token %s but got %s\n", buf1, buf2);
   lex_free(p->lexer);
   parser_free(p);

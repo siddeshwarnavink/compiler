@@ -9,6 +9,7 @@
 
 // static Arena interpreter_arena = {0};
 static interpreter_functions_t *functions;
+static interpreter_variables_t *variables;
 
 static void _interpreter_execute(ast_node_t *node);
 static void _builtin_printf(ast_node_da_t *args);
@@ -20,11 +21,12 @@ void interpreter_run(ast_node_da_t *list) {
     fprintf(stderr, "Error: Missing entry point main.\n");
 
   shfree(functions);
+  shfree(variables);
   // arena_free(&interpreter_arena);
 }
 
 void _interpreter_execute(ast_node_t *node) {
-  assert(A_LAST == 5 && "Implementation missing");
+  assert(A_LAST == 7 && "Implementation missing");
 
   switch (node->kind) {
     case A_STRLIT:
@@ -39,6 +41,11 @@ void _interpreter_execute(ast_node_t *node) {
       ast_node_da_t *stmts = &node->data.statements;
       for (size_t i = 0; i < stmts->count; ++i)
         _interpreter_execute(stmts->items[i]);
+    } break;
+
+    case A_VAR_DECLARE: {
+      const char *name = node->data.vardeclare.name;
+      shput(variables, name, node->data.vardeclare.value);
     } break;
 
     case A_FUNCALL: {

@@ -8,6 +8,11 @@ typedef struct interpreter_functions {
   ast_node_t *value;
 } interpreter_functions_t;
 
+typedef struct interpreter_variables {
+  char *key;
+  ast_node_t *value;
+} interpreter_variables_t;
+
 void interpreter_run(ast_node_da_t *list);
 
 #endif /* ifndef INTERPRETER_H */

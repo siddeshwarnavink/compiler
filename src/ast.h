@@ -5,10 +5,12 @@
 
 typedef enum ast_kind {
   A_STRLIT,
+  A_I32,
   A_MAIN,
   A_SCOPE,
   A_FUNCALL,
   A_FUNDEF,
+  A_VAR_DECLARE,
   A_LAST
 } ast_kind_t;
 
@@ -22,8 +24,9 @@ typedef struct ast_node_da {
 typedef struct ast_node {
   ast_kind_t kind;
   union {
-    // String literal
+    // Literals
     char *str_val;
+    long int_val;
 
     // Function call
     struct {
@@ -38,8 +41,15 @@ typedef struct ast_node {
     struct {
       char *name;
       ast_node_da_t args;
-      struct ast_node *body;
+      ast_node_t *body;
     } fundef;
+    
+    // Variable declaration
+    struct {
+      ast_kind_t kind;
+      char *name;
+      ast_node_t *value;
+    } vardeclare;
   } data;
 } ast_node_t;
 

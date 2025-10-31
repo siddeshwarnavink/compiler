@@ -21,10 +21,11 @@ int lex_init(lex_t *l, const char *file_path) {
 }
 
 token_t lex_next(lex_t *l) {
-  assert(T_LAST == 260 && "Implementation missing");
+  assert(T_LAST == 261 && "Implementation missing");
 
   char ch;
   l->str_val_size = 0;
+  l->int_val = 0;
 
   // Skip whitespace
   while ((ch = fgetc(l->file)) != EOF) {
@@ -43,7 +44,8 @@ token_t lex_next(lex_t *l) {
   // String literal
   if (ch == '"') {
     l->col++;
-    while ((ch = fgetc(l->file)) != EOF && ch != '"') {
+    while ((ch = fgetc(l->file)) != EOF) {
+      if (ch == '"') break;
       l->col++;
 
       if (ch == '\\') {
@@ -76,7 +78,24 @@ token_t lex_next(lex_t *l) {
     return T_STRLIT;
   }
 
-  // TODO: Support for number literal
+  // Decimal Number literal
+  if (isdigit(ch)) {
+    l->int_val = ch - '0';
+    l->col++;
+    while ((ch = fgetc(l->file)) != EOF) {
+      if (!isdigit(ch)) {
+        fseek(l->file, -1, SEEK_CUR);
+        l->col--;
+        break;
+      }
+      l->col++;
+      l->int_val *= 10;
+      l->int_val += ch - '0';
+    }
+    return T_INTLIT;
+  }
+
+  // TODO: Support Hexadecimal literals.
 
   // Operators/punctuation
   if (strchr("(){}[]<>.,;:=+-*/!&|", ch)) {
@@ -98,6 +117,8 @@ token_t lex_next(lex_t *l) {
   ungetc(ch, l->file);
   l->col--;
 
+  if (strncmp(l->str_val, "i32", l->str_val_size) == 0) return T_I32;
+
   return T_SYMBOL;
 }
 
@@ -115,8 +136,8 @@ void lex_report_err(lex_t *lexer, const char *fmt, ...) {
   fprintf(stderr, "\n");
 }
 
-void lex_kind_label(token_t t, char *buf) {
-  assert(T_LAST == 260 && "Implementation missing");
+void lex_kind_label(lex_t *l, token_t t, char *buf) {
+  assert(T_LAST == 261 && "Implementation missing");
 
   if (t < 256) {
     sprintf(buf, "'%c'", (char)t);
@@ -128,16 +149,19 @@ void lex_kind_label(token_t t, char *buf) {
       sprintf(buf, "T_EOF");
       break;
     case T_SYMBOL:
-      sprintf(buf, "T_SYMBOL");
+      sprintf(buf, "T_SYMBOL(%.*s)", l->str_val_size, l->str_val);
       break;
     case T_STRLIT:
-      sprintf(buf, "T_STRLIT");
+      sprintf(buf, "T_STRLIT(%.*s)", l->str_val_size, l->str_val);
       break;
     case T_INTLIT:
-      sprintf(buf, "T_INTLIT");
+      sprintf(buf, "T_INTLIT(%ld)", l->int_val);
       break;
     case T_LAST:
       sprintf(buf, "T_LAST");
+      break;
+    case T_I32:
+      sprintf(buf, "T_I32");
       break;
     default:
       assert(0 && "Unhandled token");
