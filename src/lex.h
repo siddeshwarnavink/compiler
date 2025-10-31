@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#define MAX_SYMBOL_LEN 1024
+#define MAX_SYMBOL_LEN 256
 
 typedef struct lex {
   const char *file_path;
@@ -28,6 +28,8 @@ typedef enum token {
 int lex_init(lex_t *l, const char *file_path);
 
 token_t lex_next(lex_t *l);
+
+token_t lex_peek(lex_t *l);
 
 void lex_kind_label(lex_t *l, token_t t, char *buf);
 

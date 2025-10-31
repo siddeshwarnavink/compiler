@@ -23,23 +23,57 @@ int lex_init(lex_t *l, const char *file_path) {
 token_t lex_next(lex_t *l) {
   assert(T_LAST == 261 && "Implementation missing");
 
-  char ch;
+  char ch = fgetc(l->file), chnext;
   l->str_val_size = 0;
   l->int_val = 0;
 
-  // Skip whitespace
-  while ((ch = fgetc(l->file)) != EOF) {
-    if (ch == '\n') {
-      l->line++;
-      l->col = 0;
-    } else {
-      l->col++;
-    }
+  if (ch == EOF) return T_EOF;
 
-    if (!isspace(ch)) break;
+  // Skip whitespace
+  if (isspace(ch)) {
+    while ((ch = fgetc(l->file)) != EOF) {
+      if (ch == '\n') {
+        l->line++;
+        l->col = 0;
+      } else {
+        l->col++;
+      }
+
+      if (!isspace(ch)) break;
+    }
   }
 
-  if (ch == EOF) return T_EOF;
+  // Skip comments
+  if (ch == '/') {
+    chnext = fgetc(l->file);
+    if (chnext == '/') {
+      while ((ch = fgetc(l->file)) != EOF && ch != '\n') {
+        l->col++;
+      }
+      if (ch == '\n') {
+        l->line++;
+        l->col = 0;
+      }
+      return lex_next(l);
+    } else if (chnext == '*') {
+      while ((ch = fgetc(l->file)) != EOF) {
+        if (ch == '\n') {
+          l->line++;
+          l->col = 0;
+        }
+        if (ch == '*') {
+          if ((ch = fgetc(l->file)) == '/')
+            break;
+          else
+            ungetc(ch, l->file);
+        }
+        l->col++;
+      }
+      return lex_next(l);
+    } else {
+      ungetc(chnext, l->file);
+    }
+  }
 
   // String literal
   if (ch == '"') {
@@ -120,6 +154,21 @@ token_t lex_next(lex_t *l) {
   if (strncmp(l->str_val, "i32", l->str_val_size) == 0) return T_I32;
 
   return T_SYMBOL;
+}
+
+token_t lex_peek(lex_t *l) {
+  fpos_t pos_bak;
+  int line_bak = l->line;
+  int col_bak = l->col;
+
+  fgetpos(l->file, &pos_bak);
+  token_t token = lex_next(l);
+
+  l->line = line_bak;
+  l->col = col_bak;
+  fsetpos(l->file, &pos_bak);
+
+  return token;
 }
 
 void lex_report_err(lex_t *lexer, const char *fmt, ...) {
