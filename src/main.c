@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
   if (action == CA_LEXDUMP) {
     token_t token;
     while ((token = lex_next(&lexer)) != T_EOF) {
-      char buf[256];
+      char buf[LEX_MAX_SYMBOL_LEN];
       lex_kind_label(&lexer, token, buf);
       printf("%s\n", buf);
     }

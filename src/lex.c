@@ -6,13 +6,24 @@
 
 #include "lex.h"
 
-static void _ensure_capacity(lex_t *l, int needed);
+static void _ensure_capacity(lex_t *l, int needed) {
+  if (l->str_val_size + needed >= l->str_val_capacity) {
+    l->str_val_capacity *= 2;
+    l->str_val = realloc(l->str_val, l->str_val_capacity);
+  }
+}
+
+static inline int _fpeek(FILE *f) {
+    int ch = fgetc(f);
+    if (ch != EOF) ungetc(ch, f);
+    return ch;
+}
 
 int lex_init(lex_t *l, const char *file_path) {
   l->file_path = file_path;
-  l->str_val = malloc(MAX_SYMBOL_LEN);
+  l->str_val = malloc(LEX_MAX_SYMBOL_LEN);
   if (!l->str_val) return -1;
-  l->str_val_capacity = MAX_SYMBOL_LEN;
+  l->str_val_capacity = LEX_MAX_SYMBOL_LEN;
 
   l->file = fopen(file_path, "r");
   if (!l->file) return -1;
@@ -23,7 +34,7 @@ int lex_init(lex_t *l, const char *file_path) {
 token_t lex_next(lex_t *l) {
   assert(T_LAST == 261 && "Implementation missing");
 
-  char ch = fgetc(l->file), chnext;
+  char ch = fgetc(l->file);
   l->str_val_size = 0;
   l->int_val = 0;
 
@@ -31,6 +42,13 @@ token_t lex_next(lex_t *l) {
 
   // Skip whitespace
   if (isspace(ch)) {
+    if (ch == '\n') {
+      l->line++;
+      l->col = 0;
+    } else {
+      l->col++;
+    }
+
     while ((ch = fgetc(l->file)) != EOF) {
       if (ch == '\n') {
         l->line++;
@@ -44,35 +62,32 @@ token_t lex_next(lex_t *l) {
   }
 
   // Skip comments
-  if (ch == '/') {
-    chnext = fgetc(l->file);
-    if (chnext == '/') {
-      while ((ch = fgetc(l->file)) != EOF && ch != '\n') {
-        l->col++;
-      }
+  if (ch == '/' && _fpeek(l->file) == '/') {
+    fgetc(l->file);
+    l->col += 2;
+    while ((ch = fgetc(l->file)) != EOF && ch != '\n') l->col++;
+    if (ch == '\n') {
+      l->line++;
+      l->col = 0;
+    }
+    return lex_next(l);
+  }
+  else if (ch == '/' && _fpeek(l->file) == '*') {
+    fgetc(l->file);
+    l->col += 2;
+    while ((ch = fgetc(l->file)) != EOF) {
       if (ch == '\n') {
         l->line++;
         l->col = 0;
       }
-      return lex_next(l);
-    } else if (chnext == '*') {
-      while ((ch = fgetc(l->file)) != EOF) {
-        if (ch == '\n') {
-          l->line++;
-          l->col = 0;
-        }
-        if (ch == '*') {
-          if ((ch = fgetc(l->file)) == '/')
-            break;
-          else
-            ungetc(ch, l->file);
-        }
+      if (ch == '*' && _fpeek(l->file) == '/') {
+        fgetc(l->file);
         l->col++;
+        return lex_next(l);
       }
-      return lex_next(l);
-    } else {
-      ungetc(chnext, l->file);
+      l->col++;
     }
+    return lex_next(l);
   }
 
   // String literal
@@ -140,20 +155,24 @@ token_t lex_next(lex_t *l) {
   }
 
   // Symbol
-  while (ch != EOF && !isspace(ch) && !strchr("(){}[]<>.,;:\"", ch)) {
-    _ensure_capacity(l, 1);
-    l->str_val[l->str_val_size++] = ch;
-    ch = fgetc(l->file);
-    l->col++;
+  if (isalpha(ch) || ch == '_') {
+    while (ch != EOF && (isalnum(ch) || ch == '_')) {
+      _ensure_capacity(l, 1);
+      l->str_val[l->str_val_size++] = ch;
+      l->col++;
+      ch = fgetc(l->file);
+    }
+
+    l->str_val[l->str_val_size] = '\0';
+    ungetc(ch, l->file);
+
+    if (strcmp(l->str_val, "i32") == 0) return T_I32;
+
+    return T_SYMBOL;
   }
 
-  l->str_val[l->str_val_size] = '\0';
-  ungetc(ch, l->file);
-  l->col--;
-
-  if (strncmp(l->str_val, "i32", l->str_val_size) == 0) return T_I32;
-
-  return T_SYMBOL;
+  l->col++;
+  return T_EOF;
 }
 
 token_t lex_peek(lex_t *l) {
@@ -161,12 +180,25 @@ token_t lex_peek(lex_t *l) {
   int line_bak = l->line;
   int col_bak = l->col;
 
+  char *str_val_bak = NULL;
+  size_t str_val_size_bak = l->str_val_size;
+
+  if (l->str_val_size > 0) {
+    str_val_bak =  malloc(l->str_val_capacity);
+    if (str_val_bak) strncpy(str_val_bak, l->str_val, l->str_val_size);
+  }
+
   fgetpos(l->file, &pos_bak);
   token_t token = lex_next(l);
 
   l->line = line_bak;
   l->col = col_bak;
   fsetpos(l->file, &pos_bak);
+
+  if (str_val_bak) {
+    strncpy(l->str_val, str_val_bak, str_val_size_bak);
+    l->str_val_size = str_val_size_bak;
+  }
 
   return token;
 }
@@ -198,10 +230,10 @@ void lex_kind_label(lex_t *l, token_t t, char *buf) {
       sprintf(buf, "T_EOF");
       break;
     case T_SYMBOL:
-      sprintf(buf, "T_SYMBOL(%.*s)", l->str_val_size, l->str_val);
+      sprintf(buf, "T_SYMBOL(%.*s)", (int)l->str_val_size, l->str_val);
       break;
     case T_STRLIT:
-      sprintf(buf, "T_STRLIT(%.*s)", l->str_val_size, l->str_val);
+      sprintf(buf, "T_STRLIT(%.*s)", (int)l->str_val_size, l->str_val);
       break;
     case T_INTLIT:
       sprintf(buf, "T_INTLIT(%ld)", l->int_val);
@@ -219,10 +251,3 @@ void lex_kind_label(lex_t *l, token_t t, char *buf) {
 }
 
 void lex_free(lex_t *l) { free(l->str_val); }
-
-void _ensure_capacity(lex_t *l, int needed) {
-  if (l->str_val_size + needed >= l->str_val_capacity) {
-    l->str_val_capacity *= 2;
-    l->str_val = realloc(l->str_val, l->str_val_capacity);
-  }
-}

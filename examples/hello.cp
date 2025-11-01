@@ -6,7 +6,6 @@
 main() {
   i32 a = 10;
   i32 b = 12;
-  i32 c = 1+a*b+2;
 
   printf("Hello before scope!\n");
   {

@@ -3,15 +3,15 @@
 
 #include <stdio.h>
 
-#define MAX_SYMBOL_LEN 256
+#define LEX_MAX_SYMBOL_LEN 256
 
 typedef struct lex {
   const char *file_path;
   FILE *file;
   long int_val;
   char *str_val;
-  int str_val_size;
-  int str_val_capacity;
+  size_t str_val_size;
+  size_t str_val_capacity;
   int line;
   int col;
 } lex_t;
